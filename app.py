@@ -367,19 +367,19 @@ def fc_accuracy_display(actual, fitted, model_label):
         elif mase < 1.0:  label, detail = "\U0001f7e1 Good fit",      f"The model beats a naive guess (MASE: {mase})."
         elif mase < 1.5:  label, detail = "\U0001f7e0 Moderate fit",  f"The model is close to a naive guess (MASE: {mase}). Demand may be too erratic to forecast reliably."
         else:             label, detail = "\U0001f534 Unreliable",    f"A naive guess outperforms the model (MASE: {mase}). This item has highly variable demand, so use the forecast as a rough guide only."
-        st.info(f"Forecast accuracy: **{label}** — {detail}")
+        st.info(f"Forecast accuracy: **{label}**. {detail}")
         st.caption(f"Model: {model_label} · Note: MAPE not shown as percentage errors are misleading at low average volume ({np.mean(np.array(actual,dtype=float)):.1f} units/month).")
     elif mape is not None:
-        if   mape <= 15: label, detail = "\U0001f7e2 Excellent fit",    f"Average error of {mape}% per month \u2014 forecasts are highly reliable."
-        elif mape <= 30: label, detail = "\U0001f7e1 Good fit",         f"Average error of {mape}% per month \u2014 forecasts are reasonably reliable."
-        elif mape <= 50: label, detail = "\U0001f7e0 Moderate fit",     f"Average error of {mape}% per month \u2014 demand is variable. Use forecasts as a directional guide."
+        if   mape <= 15: label, detail = "\U0001f7e2 Excellent fit",    f"Average error of {mape}% per month. Forecasts are highly reliable."
+        elif mape <= 30: label, detail = "\U0001f7e1 Good fit",         f"Average error of {mape}% per month. Forecasts are reasonably reliable."
+        elif mape <= 50: label, detail = "\U0001f7e0 Moderate fit",     f"Average error of {mape}% per month. Demand is variable, so use forecasts as a directional guide."
         else:            label, detail = "\U0001f534 High uncertainty", (
             f"Average error of {mape}% per month. "
             "This item has highly erratic demand that is difficult to predict accurately. "
             "Use the forecast as a rough order-of-magnitude estimate and apply extra safety stock to compensate."
         )
         mase_note = f" \u00b7 MASE: {mase} ({'better' if mase is not None and mase < 1 else 'worse'} than naive)" if mase is not None else ""
-        st.info(f"Forecast accuracy: **{label}** — {detail}")
+        st.info(f"Forecast accuracy: **{label}**. {detail}")
         st.caption(f"Model: {model_label}{mase_note}")
 
 def fc_check_erratic(forecast_vals, historical_vals):
@@ -649,7 +649,7 @@ if location_col and selected_location != "All Locations":
         st.stop()
 
 if location_col and selected_location != "All Locations":
-    st.info(f"📍 Showing data for: **{selected_location}** — switch location in the sidebar.")
+    st.info(f"📍 Showing data for: **{selected_location}**. Switch location in the sidebar.")
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TABS
@@ -658,8 +658,8 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 ABC Inventory Analysis",
     "📈 Demand Forecast",
     "🔔 Inventory Alerts & Optimization",
-    "👥 Customer Segments",
-    "📉 Slow Movers",
+    "👥 Customer Segmentation",
+    "📉 Demand Health",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -765,7 +765,8 @@ with tab1:
         st.cache_data.clear()
         # Clear cached reorder results so optimization models don't show stale data
         for _k in ["rop_df", "rop_display", "stock_df_cached", "last_opt_run",
-                   "opt1_open", "opt2_open", "opt3_open", "opt4_open"]:
+                   "opt1_open", "opt2_open", "opt3_open", "opt4_open",
+                   "slow_df", "slow_monthly", "stock_slow"]:
             st.session_state.pop(_k, None)
         st.rerun()
 
@@ -1693,7 +1694,7 @@ with tab3:
                         return f"Plan to order {int(r['EOQ'])} units soon ({int(r['Days of Stock'])} days left{freq})"
                     elif r["Status"] == "⚠️ Overstocked":
                         excess = int(r["Current Stock"] - r["ROP (units)"] * 1.5)
-                        return f"Consider reducing next order — excess stock of ~{excess} units"
+                        return f"Consider reducing next order. Excess stock of ~{excess} units"
                     else:
                         return f"No action needed ({int(r['Days of Stock'])} days of stock remaining{freq})"
                 rop_df["Recommended Action"] = rop_df.apply(get_action, axis=1)
@@ -1764,7 +1765,7 @@ with tab3:
                     for supplier, grp in action_items.groupby("Supplier"):
                         supplier_label = supplier if pd.notna(supplier) else "Unknown Supplier"
                         total_eoq = grp["EOQ"].sum() if "EOQ" in grp.columns else grp["Suggested Order Qty"].sum()
-                        with st.expander(f"📦 {supplier_label} — {len(grp)} item(s) to order", expanded=False):
+                        with st.expander(f"📦 {supplier_label} ({len(grp)} item(s) to order)", expanded=False):
                             po_cols = ["Item Name","Status","EOQ","Recommended Action","Days of Stock"]
                             po_cols = [c for c in po_cols if c in grp.columns]
                             st.dataframe(grp[po_cols], use_container_width=True, hide_index=True)
@@ -1966,21 +1967,21 @@ with tab3:
 
                     if risk == "🔴 High":
                         if not pd.isna(d) and int(d) <= 7:
-                            return f"Order immediately — stock runs out in {int(d)} day(s). Suggested order: {cover_30} units (30-day cover)"
+                            return f"Order immediately. Stock runs out in {int(d)} day(s). Suggested order: {cover_30} units (30-day cover)"
                         elif not pd.isna(d):
-                            return f"Order urgently — only {int(d)} days of stock left. Suggested order: {cover_30} units (30-day cover)"
+                            return f"Order urgently. Only {int(d)} days of stock left. Suggested order: {cover_30} units (30-day cover)"
                         else:
-                            return f"High demand risk — review stock levels. Suggested order: {cover_30} units (30-day cover)"
+                            return f"High demand risk. Review stock levels. Suggested order: {cover_30} units (30-day cover)"
                     elif risk == "🟡 Medium":
                         if not pd.isna(d) and int(d) <= 30:
-                            return f"Plan an order this week — {int(d)} days of stock remaining. Suggested order: {cover_30} units"
+                            return f"Plan an order this week. {int(d)} days of stock remaining. Suggested order: {cover_30} units"
                         else:
-                            return f"Monitor closely — variable demand. Consider ordering {cover_30} units if stock drops below reorder point"
+                            return f"Monitor closely. Variable demand. Consider ordering {cover_30} units if stock drops below reorder point"
                     else:
                         if not pd.isna(d):
-                            return f"No action needed — {int(d)} days of stock remaining. Review again next month"
+                            return f"No action needed. {int(d)} days of stock remaining. Review again next month"
                         else:
-                            return "No action needed — demand is stable and predictable"
+                            return "No action needed. Demand is stable and predictable"
 
                 feat_df["Recommended Action"] = feat_df.apply(recommended_action, axis=1)
 
@@ -2147,7 +2148,7 @@ with tab3:
               help="Four optimization models that go beyond simple reorder rules to help you make smarter, cost-efficient inventory decisions. Run Calculate Reorder Points first to unlock these.")
 
     if "rop_df" not in st.session_state:
-        st.info("Run **Calculate Reorder Points** above first — the optimization models use the demand, safety stock, and EOQ values calculated there.")
+        st.info("Run **Calculate Reorder Points** above first. The optimization models use the demand, safety stock, and EOQ values calculated there.")
     else:
         _rop_df   = st.session_state["rop_df"]
         _rop_disp = st.session_state["rop_display"]
@@ -2513,33 +2514,106 @@ with tab3:
 # TAB 4 – CUSTOMER SEGMENTATION (RFM + Quintile Scoring + Adaptive Clustering)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.header("👥 Customer Segmentation (RFM)")
-    st.markdown("""
-    Segments customers by **Recency** (how recently they ordered),
-    **Frequency** (how often), and **Monetary** (total quantity ordered).
-    Includes **RFM Quintile Scoring** (1–5 per dimension) and **adaptive clustering**
-    that auto-selects K-Means or GMM based on silhouette score.
-    """)
+    st.header("👥 Customer Segmentation",
+              help="This tab analyses your customers using the RFM method: Recency (how recently they ordered), Frequency (how often they order), and Monetary (how much they spend). Each customer is automatically scored and placed into a meaningful group like Champion, At Risk, or Lost, so you know exactly who to focus on and what to do next.")
 
     required_rfm = {"Customer Name","Invoice Date","Quantity"}
     if not required_rfm.issubset(df.columns):
-        st.warning(f"RFM requires columns: {required_rfm}. Missing: {required_rfm - set(df.columns)}")
+        st.warning(f"Customer Segmentation requires columns: {required_rfm}. Missing: {required_rfm - set(df.columns)}")
     else:
-        n_clusters = st.slider("Number of segments", 2, 5, 3)
-
         if st.button("🔍 Run Segmentation", type="primary"):
             with st.spinner("Segmenting customers…"):
                 snapshot = df["Invoice Date"].max()
-                rfm = df.groupby("Customer Name").agg(
+
+                # ── Monetary: use Revenue if available, else Quantity ─────
+                revenue_col_rfm = next((c for c in ["Revenue","Unit Price"] if c in df.columns), None)
+                df_rfm = df.copy()  # work on a copy to avoid mutating module-level df
+                if revenue_col_rfm == "Unit Price":
+                    df_rfm["_rfm_monetary"] = df_rfm["Quantity"] * df_rfm["Unit Price"].fillna(0)
+                    monetary_label = "Revenue ($)"
+                elif revenue_col_rfm == "Revenue":
+                    df_rfm["_rfm_monetary"] = df_rfm["Revenue"].fillna(0)
+                    monetary_label = "Revenue ($)"
+                else:
+                    df_rfm["_rfm_monetary"] = df_rfm["Quantity"]
+                    monetary_label = "Total Quantity"
+
+                rfm = df_rfm.groupby("Customer Name").agg(
                     Recency   = ("Invoice Date",  lambda x: (snapshot - x.max()).days),
-                    Frequency = ("Invoice Number" if "Invoice Number" in df.columns else "Invoice Date",
+                    Frequency = ("Invoice Number" if "Invoice Number" in df_rfm.columns else "Invoice Date",
                                  "nunique"),
-                    Monetary  = ("Quantity", "sum")
+                    Monetary  = ("_rfm_monetary", "sum"),
+                    First_Order = ("Invoice Date", "min"),
+                    Last_Order  = ("Invoice Date", "max"),
                 ).reset_index()
+
+                # ── Customer trend + avg order interval + overdue detection ─
+                df_trend = df_rfm.copy()
+                df_trend["Month"] = df_trend["Invoice Date"].dt.to_period("M")
+                mid_date = df_trend["Invoice Date"].min() + (df_trend["Invoice Date"].max() - df_trend["Invoice Date"].min()) / 2
+                trend_rows = []
+                for cust, grp in df_trend.groupby("Customer Name"):
+                    early = grp[grp["Invoice Date"] <= mid_date]["_rfm_monetary"].sum()
+                    late  = grp[grp["Invoice Date"] >  mid_date]["_rfm_monetary"].sum()
+                    if early > 0 and late > early * 1.1:
+                        trend = "📈 Growing"
+                    elif late < early * 0.9 and early > 0:
+                        trend = "📉 Declining"
+                    else:
+                        trend = "➡️ Stable"
+
+                    # Avg order interval (days between orders)
+                    dates = grp["Invoice Date"].sort_values().drop_duplicates().values
+                    if len(dates) >= 2:
+                        gaps = [int((dates[i+1] - dates[i]) / np.timedelta64(1, 'D'))
+                                for i in range(len(dates)-1)]
+                        avg_gap = int(np.mean(gaps))
+                    else:
+                        avg_gap = None
+
+                    trend_rows.append({
+                        "Customer Name": cust,
+                        "Trend": trend,
+                        "Avg Order Interval (days)": avg_gap,
+                    })
+
+                trend_df = pd.DataFrame(trend_rows)
+                rfm = rfm.merge(trend_df, on="Customer Name", how="left")
+
+                # Overdue flag: recency > avg order interval × 1.5
+                def overdue_flag(row):
+                    gap = row["Avg Order Interval (days)"]
+                    if gap is None or pd.isna(gap) or gap == 0:
+                        return "Unknown"
+                    overdue_by = row["Recency"] - gap
+                    if overdue_by > gap * 0.5:
+                        return f"⚠️ {int(overdue_by)} days overdue"
+                    elif overdue_by > 0:
+                        return f"🟡 {int(overdue_by)} days late"
+                    else:
+                        return "🟢 On schedule"
+                rfm["Order Status"] = rfm.apply(overdue_flag, axis=1)
+
+                # ── CLV estimate (12-month forward projection) ────────────
+                # CLV = (Monetary / Frequency) × (365 / avg_order_interval) × 1 year
+                # Falls back to Monetary × 1.2 if interval unknown
+                date_span_days = max((df["Invoice Date"].max() - df["Invoice Date"].min()).days, 1)
+                def calc_clv(row):
+                    freq = row["Frequency"]
+                    mon  = row["Monetary"]
+                    gap  = row["Avg Order Interval (days)"]
+                    if freq == 0 or mon == 0:
+                        return 0.0
+                    avg_order_value = mon / freq
+                    if gap and not pd.isna(gap) and gap > 0:
+                        orders_per_year = 365 / gap
+                    else:
+                        orders_per_year = (freq / date_span_days) * 365
+                    return round(avg_order_value * orders_per_year, 1)
+                rfm["Est. Annual Value (12 months)"] = rfm.apply(calc_clv, axis=1)
 
                 # ── RFM Quintile Scoring ──────────────────────────────────
                 try:
-                    # Recency: lower days = higher score (reverse)
                     rfm["R_Score"] = pd.qcut(rfm["Recency"].rank(method="first"),
                                              q=5, labels=[5,4,3,2,1]).astype(int)
                     rfm["F_Score"] = pd.qcut(rfm["Frequency"].rank(method="first"),
@@ -2547,7 +2621,6 @@ with tab4:
                     rfm["M_Score"] = pd.qcut(rfm["Monetary"].rank(method="first"),
                                              q=5, labels=[1,2,3,4,5]).astype(int)
                 except Exception:
-                    # Fallback if not enough distinct values for quintiles
                     rfm["R_Score"] = 3
                     rfm["F_Score"] = 3
                     rfm["M_Score"] = 3
@@ -2557,87 +2630,275 @@ with tab4:
                     * (20 / 3)
                 ).round(1)
 
+                # ── Behaviour-based segment labels (RFM pattern) ──────────
+                def rfm_segment_label(row):
+                    r, f, m = row["R_Score"], row["F_Score"], row["M_Score"]
+                    if r >= 4 and f >= 4 and m >= 4:
+                        return "🏆 Champion"
+                    elif r >= 3 and f >= 3 and m >= 3:
+                        return "⭐ Loyal"
+                    elif r >= 4 and f <= 2:
+                        return "🆕 New Customer"
+                    elif r >= 3 and m >= 4:
+                        return "💰 High Spender"
+                    elif r <= 2 and f >= 3 and m >= 3:
+                        return "⚠️ At Risk"
+                    elif r <= 2 and f >= 4:
+                        return "😴 Lapsed Loyal"
+                    elif r == 1 and f >= 2:
+                        return "💀 Lost"
+                    elif m <= 2 and f <= 2:
+                        return "🌱 Low Value"
+                    else:
+                        return "🔄 Occasional"
+
+                rfm["Segment"] = rfm.apply(rfm_segment_label, axis=1)
+
+                # ── Churn / at-risk flag ──────────────────────────────────
+                avg_order_gap = rfm["Recency"].median()
+                rfm["Churn Risk"] = rfm["Recency"].apply(
+                    lambda r: "🔴 High" if r > avg_order_gap * 2
+                              else ("🟡 Medium" if r > avg_order_gap * 1.3 else "🟢 Low")
+                )
+
+                # ── Recommended action per segment ────────────────────────
+                SEGMENT_ACTIONS = {
+                    "🏆 Champion":      "Reward with exclusive offers. Ask for referrals or reviews.",
+                    "⭐ Loyal":         "Upsell premium products. Offer loyalty discounts.",
+                    "🆕 New Customer":  "Onboard with a welcome offer. Encourage a second purchase.",
+                    "💰 High Spender":  "Offer premium or bundle deals. Prioritise for account management.",
+                    "⚠️ At Risk":       "Send a win-back campaign. Offer a discount or check in personally.",
+                    "😴 Lapsed Loyal":  "Re-engage with a personalised offer based on past purchases.",
+                    "💀 Lost":          "Last-chance re-engagement. If no response, deprioritise.",
+                    "🌱 Low Value":     "Nurture with low-cost touchpoints. Look for upsell opportunities.",
+                    "🔄 Occasional":    "Increase purchase frequency with targeted promotions.",
+                }
+                rfm["Recommended Action"] = rfm["Segment"].map(SEGMENT_ACTIONS).fillna("Review manually.")
+
+                # ── Adaptive clustering: auto-optimal K-Means vs GMM vs DBSCAN ──
+                # K and GMM: auto-select optimal number of clusters (2–6) using silhouette
                 from sklearn.preprocessing import StandardScaler
-                from sklearn.cluster import KMeans
+                from sklearn.cluster import KMeans, DBSCAN
                 from sklearn.metrics import silhouette_score
+                from sklearn.neighbors import NearestNeighbors
 
                 scaler = StandardScaler()
                 X = scaler.fit_transform(rfm[["Recency","Frequency","Monetary"]])
 
-                # ── Adaptive clustering: K-Means vs GMM ──────────────────
-                km = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-                km_labels = km.fit_predict(X)
-                km_sil = silhouette_score(X, km_labels) if n_clusters > 1 else 0.0
+                max_k = min(6, max(2, len(X) - 1))
 
-                gmm_sil = 0.0
-                gmm_labels = None
+                # Auto-find best K for K-Means
+                best_km_sil, best_km_labels, best_k = 0.0, None, 2
+                for k in range(2, max_k + 1):
+                    try:
+                        km_try = KMeans(n_clusters=k, random_state=42, n_init=10)
+                        lbl    = km_try.fit_predict(X)
+                        sil    = silhouette_score(X, lbl) if len(set(lbl)) > 1 else 0.0
+                        if sil > best_km_sil:
+                            best_km_sil, best_km_labels, best_k = sil, lbl, k
+                    except Exception:
+                        pass
+                # Fallback: if K-Means failed entirely, use k=2
+                if best_km_labels is None:
+                    km_fb = KMeans(n_clusters=2, random_state=42, n_init=10)
+                    best_km_labels = km_fb.fit_predict(X)
+                    best_km_sil = 0.0
+                km_sil, km_labels = best_km_sil, best_km_labels
+
+                # Auto-find best K for GMM
+                gmm_sil, gmm_labels = 0.0, None
                 try:
                     from sklearn.mixture import GaussianMixture
-                    gmm = GaussianMixture(n_components=n_clusters, covariance_type="full", random_state=42)
-                    gmm_labels = gmm.fit_predict(X)
-                    gmm_sil = silhouette_score(X, gmm_labels) if n_clusters > 1 else 0.0
+                    best_gmm_sil, best_gmm_labels = 0.0, None
+                    for k in range(2, max_k + 1):
+                        gmm_try = GaussianMixture(n_components=k, covariance_type="full", random_state=42)
+                        lbl     = gmm_try.fit_predict(X)
+                        sil     = silhouette_score(X, lbl) if k > 1 else 0.0
+                        if sil > best_gmm_sil:
+                            best_gmm_sil, best_gmm_labels = sil, lbl
+                    gmm_sil, gmm_labels = best_gmm_sil, best_gmm_labels
                 except Exception:
                     pass
 
-                if gmm_labels is not None and gmm_sil > km_sil:
-                    rfm["Cluster"] = gmm_labels
-                    cluster_method = f"GMM (silhouette: {gmm_sil:.2f})"
-                else:
-                    rfm["Cluster"] = km_labels
-                    cluster_method = f"K-Means (silhouette: {km_sil:.2f})"
+                # DBSCAN — auto-tune eps
+                dbscan_sil, dbscan_labels = 0.0, None
+                try:
+                    k_nn = max(2, min(5, len(X) - 1))
+                    nbrs = NearestNeighbors(n_neighbors=k_nn).fit(X)
+                    distances, _ = nbrs.kneighbors(X)
+                    eps_auto = float(np.percentile(distances[:, -1], 90))
+                    db = DBSCAN(eps=eps_auto, min_samples=max(2, len(X) // 20))
+                    db_raw = db.fit_predict(X)
+                    n_db_clusters = len(set(db_raw) - {-1})
+                    if 2 <= n_db_clusters <= max_k + 2:
+                        if -1 in db_raw:
+                            from sklearn.neighbors import KNeighborsClassifier
+                            mask = db_raw != -1
+                            if mask.sum() > 0:
+                                knn = KNeighborsClassifier(n_neighbors=1)
+                                knn.fit(X[mask], db_raw[mask])
+                                db_raw[~mask] = knn.predict(X[~mask])
+                        dbscan_labels = db_raw
+                        dbscan_sil = silhouette_score(X, dbscan_labels) if len(set(dbscan_labels)) > 1 else 0.0
+                except Exception:
+                    pass
 
-                st.success(f"🤖 Using **{cluster_method}**")
+                # Pick the best model
+                best_sil, best_labels, best_method = km_sil, km_labels, f"K-Means with {best_k} clusters (silhouette: {km_sil:.2f})"
+                if gmm_labels is not None and gmm_sil > best_sil:
+                    best_sil, best_labels, best_method = gmm_sil, gmm_labels, f"GMM (silhouette: {gmm_sil:.2f})"
+                if dbscan_labels is not None and dbscan_sil > best_sil:
+                    best_sil, best_labels, best_method = dbscan_sil, dbscan_labels, f"DBSCAN (silhouette: {dbscan_sil:.2f})"
 
-                # Label clusters by average Monetary (high → low)
-                cluster_order = rfm.groupby("Cluster")["Monetary"].mean().sort_values(ascending=False)
-                labels = ["🥇 High Value","🥈 Mid Value","🥉 Low Value",
-                          "⚪ Segment 4","⚪ Segment 5"]
-                label_map = {c: labels[i] for i, c in enumerate(cluster_order.index)}
-                rfm["Segment"] = rfm["Cluster"].map(label_map)
+                rfm["Cluster"] = best_labels
+                st.success(f"Best clustering model selected: **{best_method}**")
+                st.caption(
+                    f"K-Means: {km_sil:.2f} · "
+                    f"GMM: {gmm_sil:.2f} · "
+                    f"DBSCAN: {f'{dbscan_sil:.2f}' if dbscan_labels is not None else 'N/A'} "
+                    "Scores closer to 1.0 mean the groups are more clearly separated. "
+                    "The customer labels below are independent of this grouping."
+                )
 
-                # Summary
+                # ── Silhouette plot ───────────────────────────────────────
+                from sklearn.metrics import silhouette_samples
+                sil_vals   = silhouette_samples(X, best_labels)
+                unique_cls = sorted(set(best_labels))
+                fig_sil, ax_sil = plt.subplots(figsize=(8, max(3, len(unique_cls) * 0.8)))
+                y_lower = 10
+                cluster_colors = plt.cm.Set2.colors
+                for i, cl in enumerate(unique_cls):
+                    cl_sil = np.sort(sil_vals[best_labels == cl])
+                    size   = cl_sil.shape[0]
+                    y_upper = y_lower + size
+                    ax_sil.fill_betweenx(np.arange(y_lower, y_upper), 0, cl_sil,
+                                         facecolor=cluster_colors[i % len(cluster_colors)],
+                                         alpha=0.7, label=f"Cluster {i+1} ({size})")
+                    y_lower = y_upper + 5
+                ax_sil.axvline(x=best_sil, color="red", linestyle="--", linewidth=1.5,
+                               label=f"Avg silhouette: {best_sil:.2f}")
+                ax_sil.set_xlabel("Silhouette coefficient (higher = better separated)")
+                ax_sil.set_ylabel("Customers")
+                ax_sil.set_title("Cluster Quality: Silhouette Plot", fontweight="bold")
+                ax_sil.legend(fontsize=8, loc="lower right")
+                plt.tight_layout()
+                st.pyplot(fig_sil); plt.close(fig_sil)
+                st.caption(
+                    "Each bar represents one customer. "
+                    "Longer bars mean the customer fits their group well. "
+                    "Bars to the left of the red line may fit better in a different group."
+                )
+
+                # ── Summary metrics ───────────────────────────────────────
+                champions  = (rfm["Segment"] == "🏆 Champion").sum()
+                at_risk    = (rfm["Segment"] == "⚠️ At Risk").sum()
+                lost       = (rfm["Segment"] == "💀 Lost").sum()
+                churn_high = (rfm["Churn Risk"] == "🔴 High").sum()
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("🏆 Champions",       champions)
+                c2.metric("⚠️ At Risk",          at_risk)
+                c3.metric("💀 Lost",             lost)
+                c4.metric("🔴 High Churn Risk",  churn_high)
+
+                # ── Customer Lifetime Value summary ───────────────────────
+                total_clv     = rfm["Est. Annual Value (12 months)"].sum()
+                top3_clv      = rfm.nlargest(3, "Est. Annual Value (12 months)")["Est. Annual Value (12 months)"].sum()
+                top3_pct      = (top3_clv / total_clv * 100) if total_clv > 0 else 0
+                overdue_n     = rfm["Order Status"].str.startswith("⚠️").sum()
+
+                cv1, cv2, cv3, cv4 = st.columns(4)
+                cv1.metric("💰 Est. Annual Customer Value",
+                           f"${total_clv:,.0f}",
+                           help="Total estimated revenue from all customers over the next 12 months, based on each customer's order frequency and average order value.")
+                cv2.metric("🎯 Top 3 Customers Share",
+                           f"{top3_pct:.0f}% of total",
+                           help="How much of your total projected revenue comes from just your top 3 customers. A high percentage means your business is heavily dependent on a small number of customers.")
+                cv3.metric("⚠️ Overdue Orders",
+                           overdue_n,
+                           help="Customers who haven't ordered in longer than their usual gap. They may need a follow-up.")
+                cv4.metric("📈 Growing Customers",
+                           (rfm["Trend"] == "📈 Growing").sum(),
+                           help="Customers whose spending in the second half of the date range was more than 10% higher than the first half.")
+
+                # ── Revenue concentration warning ─────────────────────────
+                if top3_pct > 50:
+                    st.warning(
+                        f"Your top 3 customers account for **{top3_pct:.0f}%** of projected revenue. "
+                        "This is a high concentration risk. If any of these customers reduce orders, "
+                        "it will have a significant impact on your business."
+                    )
+
+                # ── Segment summary table ─────────────────────────────────
+                st.subheader("Segment Summary",
+                             help="Each row is a customer group. Avg Recency shows how many days since their last order. Avg Orders is how many times they ordered on average. The Recommended Action column tells you what to do with each group.")
                 summary = rfm.groupby("Segment").agg(
-                    Customers   = ("Customer Name","count"),
-                    Avg_Recency = ("Recency","mean"),
-                    Avg_Freq    = ("Frequency","mean"),
-                    Avg_Qty     = ("Monetary","mean"),
-                    Total_Qty   = ("Monetary","sum"),
-                    Avg_RFM_Score = ("RFM_Score","mean"),
+                    Customers       = ("Customer Name", "count"),
+                    Avg_Recency     = ("Recency",       "mean"),
+                    Avg_Orders      = ("Frequency",     "mean"),
+                    Avg_Monetary    = ("Monetary",      "mean"),
+                    Total_Monetary  = ("Monetary",      "sum"),
+                    Avg_RFM_Score   = ("RFM_Score",     "mean"),
                 ).round(1).reset_index()
                 summary.columns = ["Segment","# Customers","Avg Recency (days)",
-                                   "Avg Orders","Avg Qty","Total Qty","Avg RFM Score"]
+                                   "Avg Orders",f"Avg {monetary_label}",
+                                   f"Total {monetary_label}","Avg RFM Score"]
+                # Add recommended action to summary
+                summary["Recommended Action"] = summary["Segment"].map(SEGMENT_ACTIONS).fillna("")
+                st.dataframe(summary.sort_values("Avg RFM Score", ascending=False),
+                             use_container_width=True, hide_index=True)
 
-                st.subheader("Segment Summary")
-                st.dataframe(summary, use_container_width=True, hide_index=True)
+                # ── Scatter plots (emoji-free labels) ────────────────────
+                seg_label_map = {s: s.split(" ", 1)[1] if " " in s else s for s in rfm["Segment"].unique()}
+                rfm["_seg_plain"] = rfm["Segment"].map(seg_label_map)
 
-                # Scatter plot
                 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
                 colors = plt.cm.Set2.colors
-                for i, (seg, grp) in enumerate(rfm.groupby("Segment")):
+                for i, (seg_plain, grp) in enumerate(rfm.groupby("_seg_plain")):
                     axes[0].scatter(grp["Recency"], grp["Monetary"],
-                                    label=seg, alpha=0.7, s=40, color=colors[i % len(colors)])
+                                    label=seg_plain, alpha=0.7, s=50, color=colors[i % len(colors)])
                     axes[1].scatter(grp["Frequency"], grp["Monetary"],
-                                    label=seg, alpha=0.7, s=40, color=colors[i % len(colors)])
+                                    label=seg_plain, alpha=0.7, s=50, color=colors[i % len(colors)])
                 axes[0].set_xlabel("Recency (days since last order)")
-                axes[0].set_ylabel("Total Quantity")
-                axes[0].set_title("Recency vs Quantity")
+                axes[0].set_ylabel(monetary_label)
+                axes[0].set_title("Recency vs Value")
                 axes[1].set_xlabel("Order Frequency")
-                axes[1].set_ylabel("Total Quantity")
-                axes[1].set_title("Frequency vs Quantity")
+                axes[1].set_ylabel(monetary_label)
+                axes[1].set_title("Frequency vs Value")
                 axes[0].legend(fontsize=8)
                 plt.tight_layout()
                 st.pyplot(fig); plt.close(fig)
 
-                st.subheader("Customer Detail (with RFM Scores)")
-                detail_cols = ["Customer Name","Segment","Recency","Frequency","Monetary",
+                # ── Top items per segment ─────────────────────────────────
+                st.subheader("Top Items by Segment",
+                             help="The most purchased items within each customer group. Use this to tailor what you stock and promote for each type of customer.")
+                # Use df_trend which already has _rfm_monetary and avoids mutating df
+                seg_item = df_trend.merge(rfm[["Customer Name","Segment"]], on="Customer Name", how="left")
+                top_items = (seg_item.groupby(["Segment","Item Name"])["_rfm_monetary"]
+                             .sum().reset_index()
+                             .sort_values(["Segment","_rfm_monetary"], ascending=[True, False]))
+                top_items = top_items.groupby("Segment").head(5).reset_index(drop=True)
+                top_items.columns = ["Segment","Item Name", monetary_label]
+                top_items[monetary_label] = top_items[monetary_label].round(1)
+                st.dataframe(top_items, use_container_width=True, hide_index=True)
+
+                # ── Customer detail table ─────────────────────────────────
+                st.subheader("Customer Detail",
+                             help="Every customer with their group, churn risk, trend, and recommended action. Sort any column to find the customers that need attention first.")
+                detail_cols = ["Customer Name","Segment","Churn Risk","Order Status","Trend",
+                               "Recommended Action","Recency","Avg Order Interval (days)",
+                               "Est. Annual Value (12 months)","Frequency","Monetary",
                                "R_Score","F_Score","M_Score","RFM_Score"]
+                detail_df = rfm[detail_cols].copy()
+                detail_df = detail_df.rename(columns={"Monetary": monetary_label})
+                detail_df[monetary_label] = detail_df[monetary_label].round(1)
                 st.dataframe(
-                    rfm[detail_cols].sort_values("Monetary", ascending=False),
-                    use_container_width=True, height=400, hide_index=True
+                    detail_df.sort_values("RFM_Score", ascending=False),
+                    use_container_width=True, height=450, hide_index=True
                 )
                 st.download_button(
                     "⬇️ Download RFM table",
-                    to_excel_bytes(rfm),
+                    to_excel_bytes(detail_df),
                     "rfm_segments.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
@@ -2646,20 +2907,36 @@ with tab4:
 # TAB 5 – SLOW MOVERS / DEAD STOCK (Seasonal Adjustment + Changepoint Detection)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab5:
-    st.header("📉 Slow Mover & Dead Stock Detection")
-    st.markdown("""
-    Identifies items whose demand is **declining** or **stagnant** month-over-month.
-    Applies **seasonal decomposition** (12+ months) and **changepoint detection** via `ruptures`.
-    """)
+    st.header("📉 Demand Health",
+              help="Identifies items whose demand is declining or has stopped completely. Uses seasonal adjustment to remove normal seasonal patterns before flagging items, so you only see genuine declines. Changepoint detection pinpoints the exact month demand dropped.")
+
+    # ── Stock file upload — provides Current Stock and Unit Price ─────────────
+    has_stock_in_df5  = "Current Stock" in df.columns
+    has_price_in_df5  = any(c in df.columns for c in ["Unit Price","Price"])
+
+    if not has_stock_in_df5 or not has_price_in_df5:
+        st.markdown("**Tip:** upload a stock levels file with `Item Name`, `Current Stock`, and `Unit Price` to unlock 'Months Until Zero' and 'Inventory Value' features. Upload is optional.")
+    stock_file_slow = st.file_uploader("📂 Stock levels file", type=["xlsx","xls"], key="stock_slow")
+    stock_df_slow = None
+    if stock_file_slow:
+        stock_df_slow = pd.read_excel(stock_file_slow)
+        stock_df_slow.columns = stock_df_slow.columns.str.strip()
+        st.success(f"✅ Stock file loaded: {len(stock_df_slow):,} items.")
+
+    st.markdown("---")
 
     if "Invoice Date" not in df.columns:
         st.warning("Slow mover detection requires an `Invoice Date` column.")
     else:
         col_x, col_y = st.columns(2)
         decline_threshold = col_x.slider(
-            "Decline threshold (%): flag if last month < X% of peak month",
-            10, 90, 30)
-        min_history = col_y.slider("Minimum months of history to include", 2, 6, 3)
+            "Decline threshold (%)",
+            10, 90, 30,
+            help="Flag an item if its most recent month's demand is below this percentage of its peak month. Lower = stricter (flags more items). 30% is a good starting point.")
+        min_history = col_y.slider(
+            "Minimum months of history",
+            2, 6, 3,
+            help="Only include items with at least this many months of sales data. Items with very short history are excluded to avoid false positives.")
 
         if st.button("🔍 Detect Slow Movers", type="primary"):
             df2 = df.copy()
@@ -2673,9 +2950,9 @@ with tab5:
             seasonal_available = total_months >= 12
 
             if seasonal_available:
-                st.success("✅ Seasonal adjustment applied (12+ months of data detected).")
+                st.success("Seasonal adjustment applied (12+ months of data detected).")
             else:
-                st.info(f"ℹ️ Insufficient data for seasonal adjustment (need 12+ months, have {total_months}). Using raw series.")
+                st.info(f"Seasonal adjustment needs 12+ months of data (you have {total_months}). Using raw demand series.")
 
             # Check ruptures availability
             ruptures_available = False
@@ -2683,7 +2960,51 @@ with tab5:
                 import ruptures as rpt
                 ruptures_available = True
             except ImportError:
-                st.warning("⚠️ `ruptures` library not found. Changepoint detection will show N/A. Install with: `pip install ruptures==1.1.9`")
+                st.caption("Changepoint detection not available. Install `ruptures` to enable it: `pip install ruptures==1.1.9`")
+
+            # Unit price for inventory value calculation
+            price_col_slow = next((c for c in ["Unit Price","Price"] if c in df.columns), None)
+            price_map_slow = df.groupby("Item Name")[price_col_slow].mean().to_dict() if price_col_slow else {}
+            # Override/supplement with stock file if uploaded
+            if stock_df_slow is not None:
+                price_col_sf = next((c for c in ["Unit Price","Price"] if c in stock_df_slow.columns), None)
+                if price_col_sf:
+                    sf_price = stock_df_slow.set_index("Item Name")[price_col_sf].to_dict()
+                    price_map_slow = {**price_map_slow, **sf_price}  # stock file takes priority
+
+            # Current stock for months-until-zero calculation
+            has_stock_slow = "Current Stock" in df.columns
+            stock_map_slow = df.groupby("Item Name")["Current Stock"].first().to_dict() if has_stock_slow else {}
+            # Override/supplement with stock file if uploaded
+            if stock_df_slow is not None and "Current Stock" in stock_df_slow.columns:
+                sf_stock = stock_df_slow.set_index("Item Name")["Current Stock"].to_dict()
+                stock_map_slow = {**stock_map_slow, **sf_stock}  # stock file takes priority
+
+            # ABC class map from demand ranking
+            abc_class_map = {}
+            try:
+                abc_ranked = build_abc_df(df, None)[["Item Name","ABC"]]
+                abc_class_map = abc_ranked.set_index("Item Name")["ABC"].to_dict()
+            except Exception:
+                pass
+
+            # Recommended action function — defined once outside the loop
+            def get_slow_action(s, pct, muz, iv, abc):
+                prefix = "High priority (Class A). " if abc == "A" and s in ("📉 Declining","💀 Dead Stock","😴 Stagnant") else ""
+                if s == "💀 Dead Stock":
+                    val = f" (${iv:,.0f} tied up)" if iv else ""
+                    return f"{prefix}Consider clearance sale or write-off{val}. No demand recorded recently."
+                elif s == "📉 Declining":
+                    if muz is not None and muz < 3:
+                        return f"{prefix}Stock runs out in ~{muz} months at current rate. Stop reordering and clear remaining stock."
+                    return f"{prefix}Reduce reorder quantities. Investigate cause of decline before next order."
+                elif s == "😴 Stagnant":
+                    val = f" (${iv:,.0f} in stock)" if iv else ""
+                    return f"{prefix}Demand has plateaued{val}. Consider a promotion to move stock or reduce safety stock."
+                elif s == "🔄 Recovering":
+                    return "Demand is recovering. Monitor closely before resuming normal reorder quantities."
+                else:
+                    return "No action needed."
 
             results = []
             for item, grp in monthly_item.groupby("Item Name"):
@@ -2705,12 +3026,12 @@ with tab5:
                 else:
                     adjusted_series = raw_series
 
-                peak     = adjusted_series.max()
-                last_qty = adjusted_series[-1]
-                avg_qty  = adjusted_series.mean()
+                peak        = adjusted_series.max()
+                last_qty    = adjusted_series[-1]
+                avg_qty     = adjusted_series.mean()
                 pct_of_peak = last_qty / peak * 100 if peak > 0 else 0
 
-                x = np.arange(len(adjusted_series))
+                x     = np.arange(len(adjusted_series))
                 slope = np.polyfit(x, adjusted_series, 1)[0]
 
                 if pct_of_peak <= decline_threshold:
@@ -2730,58 +3051,134 @@ with tab5:
                         signal = adjusted_series.reshape(-1, 1)
                         algo = rpt.Pelt(model="rbf").fit(signal)
                         change_points = algo.predict(pen=10)
-                        # change_points is list of end indices; last is len(series)
                         if len(change_points) > 1:
-                            cp_idx = change_points[-2] - 1  # last real changepoint
+                            cp_idx = change_points[-2] - 1
                             if 0 <= cp_idx < len(grp):
                                 demand_shift_month = grp.iloc[cp_idx]["Month_dt"].strftime("%b %Y")
                     except Exception:
                         demand_shift_month = "N/A"
 
+                # ── Months until zero stock ───────────────────────────────
+                current_stock = stock_map_slow.get(item, None)
+                if current_stock is not None and last_qty > 0:
+                    months_until_zero = round(float(current_stock) / last_qty, 1)
+                elif current_stock is not None and last_qty <= 0:
+                    months_until_zero = 0.0
+                else:
+                    months_until_zero = None
+
+                # ── Inventory value at risk ───────────────────────────────
+                unit_price = price_map_slow.get(item, None)
+                inv_value  = round(float(current_stock) * float(unit_price), 2) \
+                             if current_stock is not None and unit_price is not None else None
+
+                # ── Human-readable trend label ────────────────────────────
+                slope_abs = abs(slope)
+                if slope_abs < 0.5:
+                    trend_label = "Flat"
+                elif slope > 0:
+                    trend_label = f"+{slope_abs:.1f} units/month"
+                else:
+                    trend_label = f"-{slope_abs:.1f} units/month"
+
+                # ── Recovery detection ────────────────────────────────────
+                if len(adjusted_series) >= 6:
+                    recent_slope = np.polyfit(np.arange(3), adjusted_series[-3:], 1)[0]
+                    if slope < -0.5 and recent_slope > 0.5:
+                        status = "🔄 Recovering"
+
+                # ── ABC class ─────────────────────────────────────────────
+                abc_class = abc_class_map.get(item, "C")
+
+                # ── Recommended action ────────────────────────────────────
+                action = get_slow_action(status, pct_of_peak, months_until_zero, inv_value, abc_class)
+
                 results.append({
-                    "Item Name":          item,
-                    "Status":             status,
-                    "Peak Qty/Month":     int(round(peak)),
-                    "Last Month Qty":     int(round(last_qty)),
-                    "Avg Qty/Month":      round(avg_qty, 1),
-                    "% of Peak":          round(pct_of_peak, 1),
-                    "Trend Slope":        round(slope, 2),
-                    "Months Tracked":     len(grp),
-                    "Demand Shift Month": demand_shift_month,
+                    "Item Name":            item,
+                    "ABC":                  abc_class,
+                    "Status":               status,
+                    "Recommended Action":   action,
+                    "Peak Qty/Month":       int(round(peak)),
+                    "Last Month Qty":       int(round(last_qty)),
+                    "Avg Qty/Month":        round(avg_qty, 1),
+                    "% of Peak":            round(pct_of_peak, 1),
+                    "Trend":                trend_label,
+                    "Months Tracked":       len(grp),
+                    "Demand Shift Month":   demand_shift_month,
+                    "Current Stock":        current_stock,
+                    "Months Until Zero":    months_until_zero,
+                    "Inventory Value ($)":  inv_value,
                 })
 
             slow_df = pd.DataFrame(results)
+            # Save to session state so chart selectbox doesn't collapse the tab on rerun
+            st.session_state["slow_df"]       = slow_df
+            st.session_state["slow_monthly"]  = monthly_item
             if slow_df.empty:
-                st.info("No items matched the criteria.")
+                st.info("No items matched the criteria. Try lowering the decline threshold or minimum history.")
             else:
-                dead    = (slow_df["Status"] == "💀 Dead Stock").sum()
-                decline = (slow_df["Status"] == "📉 Declining").sum()
-                stagnant= (slow_df["Status"] == "😴 Stagnant").sum()
-                active  = (slow_df["Status"] == "✅ Active").sum()
+                dead     = (slow_df["Status"] == "💀 Dead Stock").sum()
+                decline  = (slow_df["Status"] == "📉 Declining").sum()
+                stagnant = (slow_df["Status"] == "😴 Stagnant").sum()
+                active   = (slow_df["Status"] == "✅ Active").sum()
+                recovering_n = (slow_df["Status"] == "🔄 Recovering").sum()
 
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("💀 Dead Stock",  dead)
-                m2.metric("📉 Declining",   decline)
-                m3.metric("😴 Stagnant",    stagnant)
-                m4.metric("✅ Active",       active)
+                m1, m2, m3, m4, m5 = st.columns(5)
+                m1.metric("💀 Dead Stock",   dead)
+                m2.metric("📉 Declining",    decline)
+                m3.metric("😴 Stagnant",     stagnant)
+                m4.metric("🔄 Recovering",   recovering_n)
+                m5.metric("✅ Active",        active)
 
+                # ── Status distribution chart (emoji-free labels) ─────────
                 fig, ax = plt.subplots(figsize=(7, 3))
-                status_counts = slow_df["Status"].value_counts()
-                colors_map = {"💀 Dead Stock":"#dc3545","📉 Declining":"#fd7e14",
-                              "😴 Stagnant":"#ffc107","✅ Active":"#28a745"}
-                bar_colors = [colors_map.get(s,"gray") for s in status_counts.index]
-                ax.barh(status_counts.index, status_counts.values, color=bar_colors)
+                status_label_map = {
+                    "💀 Dead Stock": "Dead Stock",
+                    "📉 Declining":  "Declining",
+                    "😴 Stagnant":   "Stagnant",
+                    "🔄 Recovering": "Recovering",
+                    "✅ Active":     "Active",
+                }
+                status_counts  = slow_df["Status"].value_counts()
+                plain_statuses = [status_label_map.get(s, s) for s in status_counts.index]
+                colors_map     = {"Dead Stock": "#dc3545", "Declining": "#fd7e14",
+                                  "Stagnant": "#ffc107", "Recovering": "#4a90d9",
+                                  "Active": "#28a745"}
+                bar_colors     = [colors_map.get(l, "gray") for l in plain_statuses]
+                ax.barh(plain_statuses, status_counts.values, color=bar_colors, alpha=0.85)
                 ax.set_xlabel("Number of Items")
                 ax.set_title("Item Status Distribution", fontweight="bold")
                 plt.tight_layout()
                 st.pyplot(fig); plt.close(fig)
 
-                problem_df = slow_df[slow_df["Status"] != "✅ Active"].sort_values("% of Peak")
-                st.subheader(f"⚠️ Items Needing Attention ({len(problem_df)})")
-                st.dataframe(problem_df, use_container_width=True, height=400, hide_index=True)
+                # ── Items needing attention ───────────────────────────────
+                problem_df = slow_df[
+                    slow_df["Status"].isin(["💀 Dead Stock","📉 Declining","😴 Stagnant"])
+                ].sort_values("% of Peak")
+                st.subheader(f"Items Needing Attention ({len(problem_df)})",
+                             help="Items flagged as Dead Stock, Declining, or Stagnant, sorted by how far they've fallen from their peak demand. Items at the top need the most urgent attention.")
 
-                st.subheader("All Items")
-                st.dataframe(slow_df.sort_values("% of Peak"),
+                show_cols = ["Item Name","ABC","Status","Recommended Action","% of Peak",
+                             "Last Month Qty","Avg Qty/Month","Trend","Months Until Zero",
+                             "Inventory Value ($)","Demand Shift Month","Months Tracked"]
+                show_cols = [c for c in show_cols if c in problem_df.columns]
+                st.dataframe(problem_df[show_cols], use_container_width=True, height=400, hide_index=True)
+
+                # ── Recovering items ──────────────────────────────────────
+                if recovering_n > 0:
+                    rec_df = slow_df[slow_df["Status"] == "🔄 Recovering"].sort_values("% of Peak", ascending=False)
+                    st.subheader(f"Recovering Items ({recovering_n})",
+                                 help="Items that were declining but whose demand has turned positive in the last 3 months. Worth monitoring as they may be returning to health.")
+                    st.dataframe(rec_df[show_cols], use_container_width=True, height=250, hide_index=True)
+
+                # ── All items ─────────────────────────────────────────────
+                st.subheader("All Items",
+                             help="Full list of all items sorted by % of peak demand. Active items are at the top, dead stock at the bottom.")
+                all_cols = ["Item Name","ABC","Status","% of Peak","Last Month Qty",
+                            "Avg Qty/Month","Trend","Months Tracked",
+                            "Demand Shift Month","Current Stock","Months Until Zero"]
+                all_cols = [c for c in all_cols if c in slow_df.columns]
+                st.dataframe(slow_df[all_cols].sort_values("% of Peak", ascending=False),
                              use_container_width=True, height=300, hide_index=True)
 
                 st.download_button(
@@ -2790,3 +3187,58 @@ with tab5:
                     "slow_movers.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+
+        # ── Demand history chart — outside button block so selectbox doesn't collapse tab ──
+        if "slow_df" in st.session_state:
+            _slow_df      = st.session_state["slow_df"]
+            _slow_monthly = st.session_state["slow_monthly"]
+
+            st.subheader("Demand History Chart",
+                         help="Select any item to see its full demand history. The red dotted line marks where demand started shifting (changepoint). The dashed trend line shows the overall direction.")
+            chart_items = _slow_df["Item Name"].tolist()
+            selected_chart_item = st.selectbox("Select item to view demand history",
+                                               chart_items, key="slow_chart_item")
+            if selected_chart_item:
+                item_hist = _slow_monthly[_slow_monthly["Item Name"] == selected_chart_item].sort_values("Month_dt")
+                item_row  = _slow_df[_slow_df["Item Name"] == selected_chart_item].iloc[0]
+
+                # Strip emoji from status and trend for matplotlib title
+                status_plain = item_row["Status"].split(" ", 1)[1] if " " in item_row["Status"] else item_row["Status"]
+                trend_plain  = item_row.get("Trend", "")
+
+                fig_h, ax_h = plt.subplots(figsize=(12, 4))
+                ax_h.bar(range(len(item_hist)), item_hist["Quantity"].values,
+                         color="#145a2e", alpha=0.7, label="Monthly Demand")
+
+                # Trend line
+                x_arr      = np.arange(len(item_hist))
+                trend_line = np.polyval(np.polyfit(x_arr, item_hist["Quantity"].values, 1), x_arr)
+                trend_color = "#28a745" if trend_line[-1] >= trend_line[0] else "#dc3545"
+                ax_h.plot(x_arr, trend_line, color=trend_color, linewidth=2,
+                          linestyle="--", label="Trend")
+
+                # Changepoint marker
+                cp_month = item_row.get("Demand Shift Month", "N/A")
+                if cp_month != "N/A":
+                    try:
+                        cp_dt  = pd.to_datetime(cp_month, format="%b %Y")
+                        cp_mask = item_hist["Month_dt"] <= cp_dt
+                        if cp_mask.any():
+                            cp_pos = int(cp_mask.sum()) - 1
+                            ax_h.axvline(cp_pos, color="red", linewidth=1.5,
+                                         linestyle=":", label=f"Demand shift: {cp_month}")
+                    except Exception:
+                        pass
+
+                # X-axis labels
+                labels = [d.strftime("%b %Y") for d in item_hist["Month_dt"]]
+                tick_positions = list(range(0, len(labels), max(1, len(labels) // 12)))
+                ax_h.set_xticks(tick_positions)
+                ax_h.set_xticklabels([labels[i] for i in tick_positions],
+                                     rotation=45, ha="right", fontsize=8)
+                ax_h.set_ylabel("Quantity")
+                ax_h.set_title(f"{selected_chart_item}  |  {status_plain}  |  {trend_plain}",
+                               fontweight="bold")
+                ax_h.legend(fontsize=9)
+                plt.tight_layout()
+                st.pyplot(fig_h); plt.close(fig_h)
